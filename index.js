@@ -15,6 +15,9 @@ const io = require('socket.io')(http, {
 
 const port = process.env.PORT || 8089;
 
+// List of connected users
+var connectedUsers = {}
+
 
 // Middleware
 app.use(cors());
@@ -35,19 +38,46 @@ mongoose.connect(process.env.MONGODB_URI)
     console.log(err)
 })
 
+// Valid available username
+app.post('/username', (req, res) => {
+    res.json({status: Object.values(connectedUsers).includes(req.body.username)});
+})
+
 // Root path  
 app.get('/*', (req, res) => {
     res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
 });
 
 // Listening for new connections to socket io server
+
 io.on('connection', (socket) => {
     console.log('User connected:', socket.id)
 
-    socket.on('disconnect', (data) => {
-        console.log('User disconnected:', data)
+    //Get connected users if server rebooted
+    io.emit('getUsers');
+    
+    //Listen for username of new clients and added to the list
+    socket.on('setUsername', (username) => {
+        connectedUsers[socket.id] = username
+        io.emit('userList', Object.values(connectedUsers))
+    })
+
+    //If a client was disconnected remove it from the list 
+    socket.on('disconnect', () => {
+        console.log('User disconnected:', socket.id)
+        
+        const disconnectedUser = connectedUsers[socket.id]
+        delete connectedUsers[socket.id]
+
+        io.emit('userList', Object.values(connectedUsers));
     })
 });
+
+//Listen for username of new clients and added to the list
+io.on('setUsername', (username) => {
+    connectedUsers[socket.id] = username
+    io.emit('userList', Object.values(connectedUsers))
+})
 
 
 // Run http server on port designed
